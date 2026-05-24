@@ -7,6 +7,9 @@ data/
 *.npy
 *.npz
 
+# Reference papers (PDFs may be copyright-restricted in a public repo)
+reference/
+
 # Model artifacts
 *.pkl
 *.joblib
