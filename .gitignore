@@ -8,8 +8,10 @@ dataset/
 *.npy
 *.npz
 
-# Reference papers (PDFs may be copyright-restricted in a public repo)
-reference/
+# Reference folder — keep our own synthesis notes (.md), drop PDFs (copyright)
+reference/*
+!reference/*.md
+!reference/.gitkeep
 
 # Model artifacts
 *.pkl

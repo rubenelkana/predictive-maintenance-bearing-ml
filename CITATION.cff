@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as below."
+title: "Predictive Maintenance — Bearing Fault Prediction from Vibration Signals"
+abstract: >-
+  End-to-end machine-learning pipeline benchmarking classical feature-engineered
+  baselines against a 1D-CNN, an LSTM temporal aggregator, and a physics-informed
+  unsupervised autoencoder for bearing fault prediction on the NASA IMS dataset.
+  Includes per-window stratified evaluation, leave-one-bearing-out cross-validation
+  across 12 bearings, and a faithful reproduction of Marx & Gryllias 2022.
+authors:
+  - family-names: "Elkana"
+    given-names: "Ruben"
+    email: "rubenelkana02@gmail.com"
+repository-code: "https://github.com/rubenelkana/predictive-maintenance-bearing-ml"
+url: "https://rubenelkana.com/research/predictive-maintenance-bearing-ml"
+license: MIT
+version: "1.0.0"
+date-released: "2026-05-26"
+keywords:
+  - predictive-maintenance
+  - bearing-fault-diagnosis
+  - vibration-signal-processing
+  - 1d-cnn
+  - lstm
+  - autoencoder
+  - leave-one-bearing-out
+  - nasa-ims-bearing-dataset
+references:
+  - type: data
+    title: "IMS Bearing Dataset"
+    authors:
+      - family-names: "Lee"
+        given-names: "Jay"
+      - family-names: "Qiu"
+        given-names: "Hai"
+      - family-names: "Yu"
+        given-names: "Gang"
+      - family-names: "Lin"
+        given-names: "Jing"
+    year: 2007
+    institution: "NASA Ames Prognostics Data Repository, Center for Intelligent Maintenance Systems (IMS), University of Cincinnati"
+    url: "https://www.kaggle.com/datasets/vinayak123tyagi/bearing-dataset"
