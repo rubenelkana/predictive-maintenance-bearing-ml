@@ -30,7 +30,26 @@ figures/         Generated plots for the article
 
 ## Status
 
-Work in progress — mini-research window May 22 – Jul 15, 2026 (~8 weeks).
+Complete — May 26, 2026 (Mgg 4 of mini-research window May 22 – Jul 15).
+
+Six notebooks:
+1. `01_data_exploration` — Set 2 EDA, peak-failure snapshot identification
+2. `02_feature_engineering` — 6-D physics-informed features, EWMA 3-class labels
+3. `03_baseline_models` — Dummy / Logistic / Random Forest / XGBoost
+4. `04_advanced_model` — 1D-CNN on raw vibration windows
+5. `05_lobo_evaluation` — 12-fold Leave-One-Bearing-Out across Sets 1, 2, 3
+6. `06_unsupervised_ae` — physics-informed autoencoder (Marx & Gryllias 2022)
+
+Headline numbers:
+
+| Evaluation | Random Forest MCC | 1D-CNN MCC |
+|---|---:|---:|
+| Set-2 stratified split | 0.835 | **0.871** |
+| 12-bearing LOBO (Sets 1+2+3), mean ± std | 0.120 ± 0.185 | 0.075 ± 0.135 |
+| LOBO, failure folds only | ~0.36 | ~0.23 |
+| Darlami Fed-TGCN 2026 (literature anchor) | — | 0.636 ± 0.285 |
+
+Article: <https://rubenelkana.com/research/predictive-maintenance-bearing-ml> (~3,300 words, draft; preview key `internal`).
 
 ## License
 
