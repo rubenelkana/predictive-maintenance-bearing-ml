@@ -22,3 +22,7 @@ kagglehub>=0.3,<1.0
 jupyter>=1.0
 ipykernel>=6.0
 nbformat>=5.0           # build_*.py scripts generate paired .ipynb via nbformat
+
+# Bayesian inference (notebook 09)
+pymc>=6.0
+arviz>=1.2

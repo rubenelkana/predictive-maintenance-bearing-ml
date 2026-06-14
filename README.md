@@ -58,6 +58,7 @@ The notebook ↔ script pairing:
 | `06_unsupervised_ae.ipynb` | `build_ae.py` |
 | `07_temporal_aggregation.ipynb` | `build_temporal.py` |
 | `08_faithful_marx_ae.ipynb` | `build_marx.py` |
+| `09_bayesian_hierarchical.ipynb` | `build_bhm.py` |
 
 ## Setup
 
