@@ -48,3 +48,6 @@ env/
 # Secrets
 .env
 kaggle.json
+
+# Private study companion — for me only, not for public repo
+study-notes.md
