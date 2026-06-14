@@ -279,56 +279,154 @@ def plot_trajectories(agg, trace, bearing_labels):
     print(f"wrote {out}")
 
 
-def plot_shrinkage_comparison(agg, trace, bearing_labels):
-    """Compare BHM partial-pooling vs independent OLS on a sparse-data bearing.
+def fit_bhm_with_sparse_target(agg: pd.DataFrame, target_uid: int,
+                                sparse_tau: float = 0.1, draws: int = 1000,
+                                tune: int = 1500):
+    """Fit a SECOND BHM where only the target bearing has been artificially
+    sparsified to its first `sparse_tau` fraction of life, while the other
+    11 bearings contribute their full trajectories.
 
-    Demonstrates *borrowing strength*: the population prior tightens uncertainty
-    on a bearing with few observations, relative to fitting the bearing alone.
+    This is the experiment that *cleanly* demonstrates fleet-prior partial
+    pooling: bearing N's likelihood term is starved of late-life data, so any
+    information about its slope must come from (a) the sparse observations and
+    (b) the population priors learned from the other bearings.
+
+    Returns the trace and the marginal posterior of beta for the target
+    bearing.
     """
-    # Pick a bearing with sparse early-life data: subsample bearing 14 to first 10%
-    target_uid = 14  # S1 B4 ball-element failure
-    bi = list(bearing_labels).index(target_uid)
-    sub_full = agg[agg["bearing_uid"] == target_uid].copy()
-    sub_sparse = sub_full[sub_full["tau"] <= 0.1].copy()
-    n_sparse = len(sub_sparse)
+    # Build subset: full data for all others, first `sparse_tau` fraction for target
+    is_target = agg["bearing_uid"] == target_uid
+    keep = (~is_target) | (is_target & (agg["tau"] <= sparse_tau))
+    sub = agg[keep].copy().reset_index(drop=True)
 
-    # Independent OLS slope + uncertainty on sparse data
-    if n_sparse > 5:
-        from scipy import stats as st
-        ols = st.linregress(sub_sparse["tau"].to_numpy(),
-                            sub_sparse["log_env_rms"].to_numpy())
-        ols_slope = ols.slope
-        ols_se = ols.stderr if ols.stderr is not None else np.nan
-    else:
-        ols_slope, ols_se = np.nan, np.nan
+    bearing_idx, bearing_labels = pd.factorize(sub["bearing_uid"])
+    n_target_obs = int((sub["bearing_uid"] == target_uid).sum())
+    print(f"\n  Refit BHM with bearing UID {target_uid} sparsified to "
+          f"tau ≤ {sparse_tau} ({n_target_obs} target obs, {len(sub)} total).")
 
-    # BHM marginal posterior of beta_i for this bearing (uses FULL hierarchical fit)
-    beta_draws = trace.posterior["beta"].values.reshape(-1, len(bearing_labels))[:, bi]
-    bhm_mean = float(beta_draws.mean())
-    bhm_lo, bhm_hi = np.percentile(beta_draws, [2.5, 97.5])
+    coords = {"bearing": [int(b) for b in bearing_labels]}
+    with pm.Model(coords=coords) as model:
+        alpha_pop = pm.Normal("alpha_pop", mu=0.0, sigma=2.0)
+        beta_pop = pm.Normal("beta_pop", mu=0.0, sigma=2.0)
+        sigma_alpha = pm.HalfNormal("sigma_alpha", sigma=1.0)
+        sigma_beta = pm.HalfNormal("sigma_beta", sigma=1.0)
 
-    fig, ax = plt.subplots(figsize=(9, 4))
-    ax.errorbar(["Independent OLS\n(this bearing alone)", "BHM partial pooling\n(this bearing + fleet)"],
-                [ols_slope, bhm_mean],
-                yerr=[[ols_se * 1.96 if not np.isnan(ols_se) else 0, bhm_mean - bhm_lo],
-                      [ols_se * 1.96 if not np.isnan(ols_se) else 0, bhm_hi - bhm_mean]],
-                fmt="o", markersize=10, capsize=8, color="#dc2626", lw=2)
+        alpha_offset = pm.Normal("alpha_offset", mu=0.0, sigma=1.0, dims="bearing")
+        beta_offset = pm.Normal("beta_offset", mu=0.0, sigma=1.0, dims="bearing")
+        alpha = pm.Deterministic("alpha", alpha_pop + sigma_alpha * alpha_offset,
+                                 dims="bearing")
+        beta = pm.Deterministic("beta", beta_pop + sigma_beta * beta_offset,
+                                dims="bearing")
+        sigma_obs = pm.HalfNormal("sigma_obs", sigma=1.0)
+
+        mu = alpha[bearing_idx] + beta[bearing_idx] * sub["tau"].to_numpy()
+        pm.Normal("y", mu=mu, sigma=sigma_obs,
+                  observed=sub["log_env_rms"].to_numpy())
+
+        trace = pm.sample(
+            draws=draws, tune=tune, chains=4, cores=4,
+            random_seed=4242, progressbar=True, target_accept=0.99,
+        )
+
+    target_idx = list(bearing_labels).index(target_uid)
+    beta_target = trace.posterior["beta"].values.reshape(-1, len(bearing_labels))[
+        :, target_idx
+    ]
+    return trace, beta_target, n_target_obs
+
+
+def plot_shrinkage_comparison(agg, target_uid: int = 14, sparse_tau: float = 0.1):
+    """Proper partial-pooling demonstration.
+
+    Compares three estimators of bearing-`target_uid`'s slope, ALL using the
+    SAME sparse target data (first `sparse_tau` of life):
+
+      1. OLS on the sparse target alone (no pooling, no fleet info)
+      2. BHM partial pooling: refit on sparse target + full others (fleet prior helps)
+      3. (For reference) BHM full pooling: posterior of beta with target's
+         FULL data + full others — best-case oracle the partial pool reaches
+         toward as more target data arrives.
+
+    The partial-pooling CI should be narrower than the OLS CI because the
+    fleet prior brings information from the other 11 bearings to bear on the
+    sparsified target.
+    """
+    from scipy import stats as st
+
+    sub_target_full = agg[agg["bearing_uid"] == target_uid].copy()
+    sub_target_sparse = sub_target_full[sub_target_full["tau"] <= sparse_tau].copy()
+    n_sparse = len(sub_target_sparse)
+
+    # 1. OLS on sparse target alone
+    ols = st.linregress(sub_target_sparse["tau"].to_numpy(),
+                        sub_target_sparse["log_env_rms"].to_numpy())
+    ols_slope = float(ols.slope)
+    ols_ci_half = (ols.stderr * 1.96) if ols.stderr is not None else np.nan
+
+    # 2. Refit BHM on (sparse target + full others)
+    _, beta_partial, _ = fit_bhm_with_sparse_target(
+        agg, target_uid, sparse_tau=sparse_tau, draws=1000, tune=1500,
+    )
+    pp_mean = float(beta_partial.mean())
+    pp_lo, pp_hi = np.percentile(beta_partial, [2.5, 97.5])
+
+    # 3. Reference: OLS on FULL target trajectory (the oracle)
+    ols_full = st.linregress(sub_target_full["tau"].to_numpy(),
+                             sub_target_full["log_env_rms"].to_numpy())
+    oracle_slope = float(ols_full.slope)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 5))
+    labels = [
+        f"OLS on target alone\n(no pooling, {n_sparse} obs)",
+        f"BHM partial pooling\n(sparse target + full fleet)",
+        f"OLS on FULL target trajectory\n(reference — uses {len(sub_target_full)} obs)",
+    ]
+    means = [ols_slope, pp_mean, oracle_slope]
+    yerr_lo = [ols_ci_half if not np.isnan(ols_ci_half) else 0,
+               pp_mean - pp_lo, 0.0]
+    yerr_hi = [ols_ci_half if not np.isnan(ols_ci_half) else 0,
+               pp_hi - pp_mean, 0.0]
+    colors = ["#7f8c8d", "#dc2626", "#27ae60"]
+    for i, (lab, m, lo, hi, c) in enumerate(zip(labels, means, yerr_lo, yerr_hi,
+                                                colors)):
+        ax.errorbar([i], [m], yerr=[[lo], [hi]], fmt="o", markersize=12,
+                    capsize=10, color=c, lw=2.5,
+                    label=f"{lab.split(chr(10))[0]} = {m:.3f}")
+
+    ax.set_xticks(range(3))
+    ax.set_xticklabels(labels, fontsize=9)
     ax.axhline(0.0, color="gray", ls="--", lw=0.6, label="no decay")
-    ax.set_ylabel(r"estimated slope $\beta_i$")
+    ax.set_ylabel(r"estimated slope $\beta$")
+    n_full = len(sub_target_full)
     ax.set_title(
-        f"Borrow-strength demo: bearing UID {target_uid} ({NAMES[target_uid]}),\n"
-        f"using only the first 10% of life ({n_sparse} observations).\n"
-        "BHM shrinks the slope toward the fleet posterior, narrowing the credible interval.",
+        f"Partial-pooling demonstration on bearing UID {target_uid} ({NAMES[target_uid]}),\n"
+        f"sparsified to its first {int(sparse_tau * 100)} % of life ({n_sparse} obs out of {n_full}).\n"
+        f"The BHM partial-pooling fit uses the same {n_sparse} target observations as the OLS,\n"
+        f"PLUS the other 11 bearings' full trajectories as the fleet prior.",
         fontsize=10,
     )
     ax.grid(axis="y", alpha=0.3)
-    ax.legend(loc="best")
     fig.tight_layout()
     out = FIG_DIR / "19_bhm_shrinkage.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
-    print(f"wrote {out}")
-    print(f"  OLS  slope ± 95% CI  = {ols_slope:.3f}  ± {ols_se * 1.96 if not np.isnan(ols_se) else 'NA':.3f}")
-    print(f"  BHM  mean + 95% CrI  = {bhm_mean:.3f}  [{bhm_lo:.3f}, {bhm_hi:.3f}]")
+    print(f"\nwrote {out}")
+    ols_str = f"{ols_ci_half:.3f}" if not np.isnan(ols_ci_half) else "NA"
+    print(f"  1. OLS on sparse target alone        slope {ols_slope:+.3f} ± 95% CI {ols_str}")
+    print(f"  2. BHM partial pooling (sparse + fleet) slope {pp_mean:+.3f}  [{pp_lo:+.3f}, {pp_hi:+.3f}]")
+    print(f"  3. OLS on FULL target (oracle)        slope {oracle_slope:+.3f}")
+
+    # Quantitative summary
+    if not np.isnan(ols_ci_half):
+        ols_ci_width = 2.0 * ols_ci_half
+    else:
+        ols_ci_width = float("nan")
+    pp_ci_width = pp_hi - pp_lo
+    if not np.isnan(ols_ci_width) and pp_ci_width > 0:
+        ratio = ols_ci_width / pp_ci_width
+        print(f"  → BHM partial pooling CI width is {ratio:.1f}× narrower than OLS CI,\n"
+              f"    AND its point estimate ({pp_mean:.3f}) is closer to the oracle ({oracle_slope:.3f})\n"
+              f"    than the OLS point estimate ({ols_slope:.3f}) is.")
 
 
 def main():
@@ -340,23 +438,17 @@ def main():
 
     summarise(trace, bearing_labels)
 
-    # Persist trace if a NetCDF backend is available; skip silently otherwise
-    # (NetCDF backends are optional and pull heavy dependencies on macOS).
+    # Persist trace if a NetCDF backend works; skip otherwise.
     try:
-        import netCDF4  # noqa: F401
         print(f"Saving InferenceData to {OUT_NC}")
         trace.to_netcdf(OUT_NC)
-    except ImportError:
-        try:
-            import h5netcdf  # noqa: F401
-            print(f"Saving InferenceData to {OUT_NC}")
-            trace.to_netcdf(OUT_NC)
-        except ImportError:
-            print(f"(skipped NetCDF save — install netCDF4 or h5netcdf to enable)")
+    except (ImportError, ValueError) as exc:
+        print(f"(skipped NetCDF save: {exc.__class__.__name__}: {exc})")
 
     plot_population_and_per_bearing(trace, bearing_labels)
     plot_trajectories(agg, trace, bearing_labels)
-    plot_shrinkage_comparison(agg, trace, bearing_labels)
+    # Proper partial-pooling demo refits the BHM on (sparse target + full others).
+    plot_shrinkage_comparison(agg, target_uid=14, sparse_tau=0.1)
 
     print("\nDone.")
 

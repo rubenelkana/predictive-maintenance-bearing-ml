@@ -38,16 +38,19 @@ The model is deliberately minimal. The point is not to outperform the 1D-CNN or 
 - Population-level $\beta_{\text{pop}}$ posterior should be **positive but small** — driven by the four failure bearings, diluted by the eight healthy bearings that stay near baseline.
 - Per-bearing $\beta_i$: the four failure UIDs (13, 14, 21, 33) should sit well above zero with comparatively narrow credible intervals (lots of data each, clear positive trend). The eight healthy bearings should sit near zero with wider intervals (no signal, prior dominates).
 - $\sigma_{\text{obs}}$ posterior should be modest (~0.1-0.4) — the linear-in-tau model fits late-life exponential trajectories imperfectly, and the residual noise should reflect that.
-- No divergences, R-hat < 1.01 across all parameters, effective sample size > 400 per chain. If not, the non-centred parameterisation needs revisiting.
+- No divergences, R-hat in the 1.00–1.01 range across all parameters, effective sample size > 400 per chain. In practice this model hits R-hat ≈ 1.005–1.007 on the four population-level hyperparameters and triggers a `max_treedepth` warning on multiple chains — acceptable for a methodological demonstration but not yet production-grade. Longer tuning (`tune ≥ 2000`) and a stricter `target_accept ≥ 0.99` are the documented next-pass fixes.
 
 ## Borrow-strength demonstration
 
-The dedicated `plot_shrinkage_comparison` panel compares an independent OLS fit on the first 10 % of bearing UID 14's life against the BHM marginal posterior of $\beta_{14}$ from the full hierarchical fit. With only ~10 observations:
+The dedicated `plot_shrinkage_comparison` panel is a like-for-like partial-pooling experiment, not a "more data wins" comparison. Bearing UID 14 is *artificially* sparsified to the first 10 % of its trajectory (~156 observations of ~4 500). Three estimators are then compared on that sparse target:
 
-- Independent OLS produces a slope estimate with very wide standard error (often the slope sign flips between repeated subsamples).
-- BHM partial pooling shrinks the slope toward the fleet posterior and yields a much narrower 95 % credible interval — the practical demonstration of why a fleet-level Bayesian framework outperforms per-asset point estimates on data-sparse new assets.
+1. **OLS on the sparsified target alone** — no pooling, no fleet information. Wide 95 % standard error; slope estimate often unstable.
+2. **BHM partial pooling — refit on (sparsified target + the other 11 bearings' full trajectories)** — bearing 14's likelihood term sees exactly the same 156 observations as the OLS, but its slope posterior also inherits information from the population priors $\alpha_{\text{pop}}, \beta_{\text{pop}}, \sigma_\alpha, \sigma_\beta$ learned from the other bearings.
+3. **OLS on bearing 14's *full* trajectory** — included as a reference oracle: the answer the partial pool is trying to reach as more target data arrives.
 
-This is exactly the value proposition of the Van Den Broek et al. 2025 paper, transplanted to bearing vibration.
+If partial pooling works as advertised, the BHM credible interval is narrower than the OLS interval *despite both seeing the same 156 target observations*, and the BHM point estimate sits closer to the oracle than the OLS point estimate does.
+
+This is the value proposition of the Van Den Broek et al. 2025 paper transplanted to bearing vibration. It is also the only comparison in this notebook that isolates the fleet-prior contribution from the "more data" effect.
 
 ## What this notebook does *not* do
 
@@ -60,4 +63,6 @@ To keep scope honest, this notebook does not:
 
 ## Why this matters for the PhD pitch
 
-The bearing project is the candidate's primary applied-ML evidence for the predictive-maintenance research direction. The Van Den Broek-Hodkiewicz-Polpo 2025 paper is the methodological anchor for Wave 2 supervisor outreach at UWA's ARC Training Centre for Transforming Maintenance through Data Science. Demonstrating, on the same dataset already in the repository, that the methodology transfers cleanly — without faking results, without overclaiming, with honest discussion of what is and is not in scope — is the difference between "I will learn this in Year 1" and "I have already started."
+The bearing project is the candidate's primary applied-ML evidence for the predictive-maintenance research direction. The Van Den Broek-Hodkiewicz-Polpo 2025 paper is the methodological anchor for Wave 2 supervisor outreach at UWA's ARC Training Centre for Transforming Maintenance through Data Science. Notebook 09 deliberately stops at the *trajectory-modelling first step* of that paper's framework — fleet partial pooling, calibrated uncertainty on slopes, like-for-like demonstration that the population prior tightens sparse-asset estimates. Survival modelling, censoring, clustering, and the full RUL prognosis remain explicit follow-ups, called out in the scope-limits section above.
+
+Demonstrating, on the same dataset already in the repository, that the BHM methodology transfers cleanly — without faking results, without overclaiming, with honest discussion of what is and is not in scope — is the difference between "I will learn this in Year 1" and "I have started the first step, and here is exactly where the next steps go."

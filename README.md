@@ -58,7 +58,7 @@ The notebook ↔ script pairing:
 | `06_unsupervised_ae.ipynb` | `build_ae.py` |
 | `07_temporal_aggregation.ipynb` | `build_temporal.py` |
 | `08_faithful_marx_ae.ipynb` | `build_marx.py` |
-| `09_bayesian_hierarchical.ipynb` | `build_bhm.py` |
+| _09 .ipynb pending_ | `build_bhm.py` |
 
 ## Setup
 
@@ -99,8 +99,9 @@ Run notebooks in numerical order — each builds on caches written by earlier st
 | 06 | `06_unsupervised_ae.ipynb`  | Simplified Marx & Gryllias 2022 reproduction |
 | 07 | `07_temporal_aggregation.ipynb` | RF on (mean+std) aggregated features + LSTM over 25-window sequence |
 | 08 | `08_faithful_marx_ae.ipynb` | Marx reproduction with paper-calibrated augmentation amplitude |
+| 09 | `build_bhm.py` (paired `.ipynb` pending) | Fleet-informed Bayesian Hierarchical Model on `log(env_rms)`: population-level decay rate β_pop, per-bearing posteriors, like-for-like partial-pooling demonstration vs OLS. Trajectory-modelling first step; survival / clustering / RUL extensions called out in [notes/09_bayesian_hierarchical.md](notes/09_bayesian_hierarchical.md). |
 
-End-to-end reproduction is ~4–6 hours on a single GPU (LOBO CNN and Marx AE dominate runtime). Notebooks 01–04 can be run on CPU only in well under an hour.
+End-to-end reproduction is ~4–6 hours on a single GPU (LOBO CNN and Marx AE dominate runtime). Notebooks 01–04 can be run on CPU only in well under an hour. Notebook 09 (BHM) runs CPU-only and takes ~25 min wall-clock for both the full-fleet posterior and the sparse-target partial-pooling refit.
 
 ## Approach
 
